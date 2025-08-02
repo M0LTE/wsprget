@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Caching.Distributed;
+using System.Diagnostics;
 
 namespace wsprget;
 
@@ -140,12 +141,18 @@ public partial class Worker(ILogger<Worker> _logger, IDistributedCache _cache, I
             throw new ArgumentException($"Invalid band: {band}", nameof(band));
         }
 
+        var limitVal = Math.Min(10000, limit);
+
         using var httpClient = _httpClientFactory.CreateClient("WSPR");
-        var url = $"https://www.wsprnet.org/olddb?mode=html&band={bandCode}&limit={Math.Min(10000, limit)}&findcall=&findreporter=&sort=date";
+        var url = $"https://www.wsprnet.org/olddb?mode=html&band={bandCode}&limit={limitVal}&findcall=&findreporter=&sort=date";
+        var sw = Stopwatch.StartNew();
         var response = await httpClient.GetAsync(url, cancellationToken);
         if (response.IsSuccessStatusCode)
         {
             var content = await response.Content.ReadAsStringAsync(cancellationToken);
+            sw.Stop();
+            _logger.LogInformation("Fetched {band} spots limit {limit} in {elapsed:0} ms", band, limit, sw.ElapsedMilliseconds);
+
             return SpotResultsParser.ParseSpots(content, cancellationToken);
         }
         else
