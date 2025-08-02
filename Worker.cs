@@ -68,7 +68,8 @@ public partial class Worker(ILogger<Worker> _logger, IDistributedCache _cache, I
 
         try
         {
-            var rawSpots = await GetSpots(band, lastCount == 0 ? 10 : lastCount * 2, stoppingToken);
+            var lim = lastCount == 0 ? 10 : lastCount * 2;
+            var rawSpots = await GetSpots(band, lim, stoppingToken);
             var timeFilteredSpots = TimeFilter(rawSpots);
             int count = 0;
             int uncached = 0;
@@ -97,7 +98,7 @@ public partial class Worker(ILogger<Worker> _logger, IDistributedCache _cache, I
 
             if (uncached > 0)
             {
-                _logger.LogInformation("Found {new} new spots for band {Band}", uncached, band);
+                _logger.LogInformation("Found {new} new spots for band {Band}, limit was {limit}", uncached, band, lim);
             }
 
             lastCounts[band] = uncached;
