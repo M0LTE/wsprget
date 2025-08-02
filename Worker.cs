@@ -89,7 +89,11 @@ public partial class Worker(ILogger<Worker> _logger, IDistributedCache _cache, I
                 }
             }
 
-            _logger.LogInformation("Found {new} new spots for band {Band}", uncached, band);
+            if (uncached > 0)
+            {
+                _logger.LogInformation("Found {new} new spots for band {Band}", uncached, band);
+            }
+
             lastCounts[band] = uncached;
         }
         catch (Exception ex)
