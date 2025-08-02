@@ -56,7 +56,7 @@ public partial class Worker(ILogger<Worker> _logger, IDistributedCache _cache, I
     {
         if (!lastCounts.TryGetValue(band, out int lastCount))
         {
-            lastCount = 5000;
+            lastCount = 100;
             lastCounts[band] = lastCount;
         }
 
@@ -89,7 +89,7 @@ public partial class Worker(ILogger<Worker> _logger, IDistributedCache _cache, I
                 }
             }
 
-            _logger.LogInformation("Fetched {new} new spots for band {Band}", uncached, band);
+            _logger.LogInformation("Found {new} new spots for band {Band}", uncached, band);
             lastCounts[band] = uncached;
         }
         catch (Exception ex)
