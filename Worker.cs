@@ -1,75 +1,99 @@
 using Microsoft.Extensions.Caching.Distributed;
-using System.Diagnostics;
 
 namespace wsprget;
 
 public partial class Worker(ILogger<Worker> _logger, IDistributedCache _cache, IHttpClientFactory _httpClientFactory) : BackgroundService
 {
     private const int cycleTime = 30; // seconds
+    private bool parallel = false;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var tasks = new List<Task>();
 
-        foreach (var band in Enum.GetValues<Band>())
+        if (parallel)
         {
-            if (stoppingToken.IsCancellationRequested)
+            foreach (var band in Enum.GetValues<Band>())
             {
-                return;
+                if (stoppingToken.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                _ = RunLoop(band, stoppingToken);
             }
 
-            _ = DoWork(band, stoppingToken);
+            await Task.WhenAll(tasks);
         }
-
-        await Task.WhenAll(tasks);
+        else
+        {
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                foreach (var band in Enum.GetValues<Band>())
+                {
+                    await OneShot(band, stoppingToken);
+                }
+            }
+        }
     }
 
     private static readonly Random random = new();
+    private Dictionary<Band, int> lastCounts = new();
 
-    private async Task DoWork(Band band, CancellationToken stoppingToken)
+    private async Task RunLoop(Band band, CancellationToken stoppingToken)
     {
         await Task.Delay(TimeSpan.FromSeconds(random.Next(0, cycleTime)), stoppingToken);
 
-        int lastCount = 10000;
         while (!stoppingToken.IsCancellationRequested)
         {
-            try
+            await OneShot(band, stoppingToken);
+            await Task.Delay(TimeSpan.FromSeconds(cycleTime), stoppingToken);
+        }
+    }
+
+    private async Task OneShot(Band band, CancellationToken stoppingToken)
+    {
+        if (!lastCounts.TryGetValue(band, out int lastCount))
+        {
+            lastCount = 10000;
+            lastCounts[band] = lastCount;
+        }
+
+        try
+        {
+            var rawSpots = await GetSpots(band, lastCount == 0 ? 10 : lastCount * 2, stoppingToken);
+            var timeFilteredSpots = TimeFilter(rawSpots);
+            int count = 0;
+            int uncached = 0;
+            foreach (var spot in timeFilteredSpots)
             {
-                var rawSpots = await GetSpots(band, lastCount == 0 ? 10 : lastCount * 2, stoppingToken);
-                var timeFilteredSpots = TimeFilter(rawSpots);
-                int count = 0;
-                int uncached = 0;
-                foreach (var spot in timeFilteredSpots)
+                count++;
+                if (stoppingToken.IsCancellationRequested)
                 {
-                    count++;
-                    if (stoppingToken.IsCancellationRequested)
-                    {
-                        return;
-                    }
-
-                    var hash = spot.GetHash().ToString();
-
-                    var item = await _cache.GetAsync(hash, stoppingToken);
-
-                    if (item is null)
-                    {
-                        var options = new DistributedCacheEntryOptions
-                        {
-                            AbsoluteExpirationRelativeToNow = TimeSpan.FromDays(7),
-                        };
-                        await _cache.SetAsync(hash, new byte[1], options, stoppingToken);
-                        uncached++;
-                    }
+                    return;
                 }
 
-                _logger.LogInformation("Fetched {new} new spots for band {Band}", uncached, band);
-                lastCount = uncached;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError("Error fetching spots for band {Band}: {exception}", band, ex.Message);
+                var hash = spot.GetHash().ToString();
+
+                var item = await _cache.GetAsync(hash, stoppingToken);
+
+                if (item is null)
+                {
+                    var options = new DistributedCacheEntryOptions
+                    {
+                        AbsoluteExpirationRelativeToNow = TimeSpan.FromDays(7),
+                    };
+                    await _cache.SetAsync(hash, new byte[1], options, stoppingToken);
+                    uncached++;
+                }
             }
 
+            _logger.LogInformation("Fetched {new} new spots for band {Band}", uncached, band);
+            lastCounts[band] = uncached;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError("Error fetching spots for band {Band}: {exception}", band, ex.Message);
             await Task.Delay(TimeSpan.FromSeconds(cycleTime), stoppingToken);
         }
     }
