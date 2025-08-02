@@ -35,9 +35,9 @@ public partial class Worker(ILogger<Worker> _logger, IDistributedCache _cache, I
                     var sw = Stopwatch.StartNew();
                     await OneShot(band, stoppingToken);
                     sw.Stop();
-                    if (sw.ElapsedMilliseconds < 5000)
+                    if (sw.ElapsedMilliseconds < 2000)
                     {
-                        await Task.Delay(5000 - (int)sw.ElapsedMilliseconds, stoppingToken);
+                        await Task.Delay(2000 - (int)sw.ElapsedMilliseconds, stoppingToken);
                     }
                 }
             }
