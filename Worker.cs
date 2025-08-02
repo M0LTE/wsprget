@@ -145,10 +145,17 @@ public partial class Worker(ILogger<Worker> _logger, IDistributedCache _cache, I
             throw new ArgumentException($"Invalid band: {band}", nameof(band));
         }
 
-        var limitVal = Math.Min(10000, limit);
+        if (limit < 25)
+        {
+            limit = 25;
+        }
+        else if (limit > 10000)
+        {
+            limit = 10000;
+        }
 
         using var httpClient = _httpClientFactory.CreateClient("WSPR");
-        var url = $"https://www.wsprnet.org/olddb?mode=html&band={bandCode}&limit={limitVal}&findcall=&findreporter=&sort=date";
+        var url = $"https://www.wsprnet.org/olddb?mode=html&band={bandCode}&limit={limit}&findcall=&findreporter=&sort=date";
         var sw = Stopwatch.StartNew();
         var response = await httpClient.GetAsync(url, cancellationToken);
         if (response.IsSuccessStatusCode)
