@@ -32,14 +32,20 @@ public partial class Worker(ILogger<Worker> _logger, IDistributedCache _cache, I
             {
                 foreach (var band in Enum.GetValues<Band>())
                 {
+                    var sw = Stopwatch.StartNew();
                     await OneShot(band, stoppingToken);
+                    sw.Stop();
+                    if (sw.ElapsedMilliseconds < 5000)
+                    {
+                        await Task.Delay(5000 - (int)sw.ElapsedMilliseconds, stoppingToken);
+                    }
                 }
             }
         }
     }
 
     private static readonly Random random = new();
-    private Dictionary<Band, int> lastCounts = new();
+    private Dictionary<Band, int> lastCounts = [];
 
     private async Task RunLoop(Band band, CancellationToken stoppingToken)
     {
@@ -145,9 +151,9 @@ public partial class Worker(ILogger<Worker> _logger, IDistributedCache _cache, I
             throw new ArgumentException($"Invalid band: {band}", nameof(band));
         }
 
-        if (limit < 25)
+        if (limit < 100)
         {
-            limit = 25;
+            limit = 100;
         }
         else if (limit > 10000)
         {
@@ -162,7 +168,7 @@ public partial class Worker(ILogger<Worker> _logger, IDistributedCache _cache, I
         {
             var content = await response.Content.ReadAsStringAsync(cancellationToken);
             sw.Stop();
-            _logger.LogInformation("Fetched {band} spots limit {limit} in {elapsed:0} ms", band, limit, sw.ElapsedMilliseconds);
+            //_logger.LogInformation("Fetched {band} spots limit {limit} in {elapsed:0} ms", band, limit, sw.ElapsedMilliseconds);
 
             return SpotResultsParser.ParseSpots(content, cancellationToken);
         }
