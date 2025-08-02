@@ -56,7 +56,7 @@ public partial class Worker(ILogger<Worker> _logger, IDistributedCache _cache, I
     {
         if (!lastCounts.TryGetValue(band, out int lastCount))
         {
-            lastCount = 10000;
+            lastCount = 5000;
             lastCounts[band] = lastCount;
         }
 
