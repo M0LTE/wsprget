@@ -98,7 +98,14 @@ public partial class Worker(ILogger<Worker> _logger, IDistributedCache _cache, I
 
             if (uncached > 0)
             {
-                _logger.LogInformation("Found {new} new spots for band {Band}, limit was {limit}", uncached, band, lim);
+                if (uncached == lim)
+                {
+                    _logger.LogWarning("Found {new} new spots for band {Band}, limit was {limit} (limit hit)", uncached, band, lim);
+                }
+                else
+                {
+                    _logger.LogInformation("Found {new} new spots for band {Band}, limit was {limit}", uncached, band, lim);
+                }
             }
 
             lastCounts[band] = uncached;
