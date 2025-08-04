@@ -2,7 +2,7 @@ namespace wsprget;
 
 public static class SpotResultsParser
 {
-    public static List<Spot> ParseSpots(string content, CancellationToken cancellationToken)
+    public static async Task<List<Spot>> ParseSpots(string content, Func<Spot, Task<bool>> excludeFilter, CancellationToken cancellationToken)
     {
         var doc = new HtmlAgilityPack.HtmlDocument();
         doc.LoadHtml(content);
@@ -39,7 +39,11 @@ public static class SpotResultsParser
                 Mode = cells[12].InnerText.Replace("&nbsp;", "").Trim(),
                 Version = cells.Count > 13 ? cells[13].InnerText.Replace("&nbsp;", "").Trim() : null
             };
-            result.Add(spot);
+
+            if (!await excludeFilter(spot))
+            {
+                result.Add(spot);
+            }
         }
         return result;
     }
