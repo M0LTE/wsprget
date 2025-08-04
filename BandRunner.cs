@@ -32,10 +32,10 @@ internal class BandRunner(Band band, ILogger<Worker> _logger, IDistributedCache 
                             await Task.Delay(delay, stoppingToken);
                         }
                     }
-                    else
-                    {
-                         _logger.LogInformation("{band}: Skipping delay as enough time has passed since last request", GetBand(band));
-                    }
+                }
+                else
+                {
+                    _logger.LogInformation("{band}: Skipping delay as requested", GetBand(band));
                 }
             }
 
