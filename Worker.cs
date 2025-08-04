@@ -5,7 +5,7 @@ internal class Worker(BandRunnerFactory bandRunnerFactory) : BackgroundService
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var tasks = new List<Task>();
-        //var bands = new List<Band> { Band.M20 };
+        //var bands = new List<Band> { Band.M40 };
         var bands = Enum.GetValues<Band>();
 
         foreach (var band in bands)
@@ -27,9 +27,10 @@ internal class Worker(BandRunnerFactory bandRunnerFactory) : BackgroundService
     {
         await Task.Delay(Random.Shared.Next(0, 5000), stoppingToken);
 
+        bool skipDelay = false;
         while (!stoppingToken.IsCancellationRequested)
         {
-            await runner.OneShot(stoppingToken);
+            skipDelay = await runner.OneShot(skipDelay, stoppingToken);
         }
     }
 }

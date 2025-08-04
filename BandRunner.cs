@@ -9,9 +9,9 @@ internal class BandRunner(Band band, ILogger<Worker> _logger, IDistributedCache 
     private const int minSecsBetweenRequests = 5;
     private const int maxAgeDays = 7;
     private int limit = 1000;
-    private const int maxLimit = 10000;
+    private const int maxLimit = 2000;
 
-    public async Task OneShot(CancellationToken stoppingToken)
+    public async Task<bool> OneShot(bool skipDelay, CancellationToken stoppingToken)
     {
         try
         {
@@ -21,34 +21,26 @@ internal class BandRunner(Band band, ILogger<Worker> _logger, IDistributedCache 
             }
             else
             {
-                if (timerSinceLastRequest.Elapsed < TimeSpan.FromSeconds(minSecsBetweenRequests))
+                if (!skipDelay)
                 {
-                    var delay = TimeSpan.FromSeconds(minSecsBetweenRequests) - timerSinceLastRequest.Elapsed;
-                    if (delay > TimeSpan.Zero)
+                    if (timerSinceLastRequest.Elapsed < TimeSpan.FromSeconds(minSecsBetweenRequests))
                     {
-                        await Task.Delay(delay, stoppingToken);
+                        var delay = TimeSpan.FromSeconds(minSecsBetweenRequests) - timerSinceLastRequest.Elapsed;
+                        if (delay > TimeSpan.Zero)
+                        {
+                            _logger.LogInformation("{band}: Waiting {delay} before next request", GetBand(band), delay);
+                            await Task.Delay(delay, stoppingToken);
+                        }
+                    }
+                    else
+                    {
+                         _logger.LogInformation("{band}: Skipping delay as enough time has passed since last request", GetBand(band));
                     }
                 }
             }
 
-            List<Spot> rawNewSpots;
-
-            while (true)
-            {
-                rawNewSpots = await GetSpots(band, limit, stoppingToken);
-                timerSinceLastRequest.Restart();
-
-                if (rawNewSpots.Count == limit)
-                {
-                    _logger.LogError("{band}: We got the same number of spots as the limit we specified ({limit}), resetting limit to max (10000) and trying again immediately", GetBand(band), limit);
-                    limit = maxLimit;
-                }
-                else
-                {
-                    break;
-                }
-            }
-
+            var rawNewSpots = await GetSpots(band, limit, stoppingToken);
+            timerSinceLastRequest.Restart();
             var timeFilteredNewSpots = TimeFilter(rawNewSpots).ToArray();
 
             foreach (var spot in timeFilteredNewSpots)
@@ -60,20 +52,31 @@ internal class BandRunner(Band band, ILogger<Worker> _logger, IDistributedCache 
                 await _cache.SetAsync(spot.Hash, new byte[1], options, stoppingToken);
             }
 
-            _logger.LogInformation("{band}: {count} new spots for {band}", GetBand(band), timeFilteredNewSpots.Length, BandNames[band]);
+            _logger.LogInformation("{band}: {count} new spots, limit was {limit}", GetBand(band), timeFilteredNewSpots.Length, limit);
 
             limit = CalculateNewLimit(timeFilteredNewSpots.Length);
 
-            if (timeFilteredNewSpots.Length < 5)
+            if (!skipDelay && timeFilteredNewSpots.Length < 5)
             {
                 _logger.LogInformation("{band}: Small number of spots, sleeping for 30 seconds", GetBand(band));
                 await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
+            }
+
+            if (rawNewSpots.Count == limit)
+            {
+                Debugger.Break();
+                return true; // Indicate that we should skip the delay next time
+            }
+            else
+            {
+                return false;
             }
         }
         catch (Exception ex)
         {
             _logger.LogError("{band}: Error fetching spots: {exception}", GetBand(band), ex.Message);
             await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
+            return false;
         }
     }
 
@@ -106,10 +109,10 @@ internal class BandRunner(Band band, ILogger<Worker> _logger, IDistributedCache 
             newLimit = 100;
             _logger.LogInformation("{band}: Clamping limit to {newLimit} as it was below 100", GetBand(band), newLimit);
         }
-        else if (newLimit > 10000)
+        else if (newLimit > maxLimit)
         {
-            newLimit = 10000;
-            _logger.LogWarning("{band}: Clamping limit to {newLimit} as it was above 10000", GetBand(band), newLimit);
+            newLimit = maxLimit;
+            _logger.LogWarning("{band}: Clamping limit to {newLimit} as it was above {maxLimit}", GetBand(band), newLimit, maxLimit);
         }
 
         return newLimit;
