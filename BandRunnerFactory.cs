@@ -2,7 +2,7 @@ using Microsoft.Extensions.Caching.Distributed;
 
 namespace wsprget;
 
-internal class BandRunnerFactory(ILogger<Worker> logger, IDistributedCache cache, IHttpClientFactory httpClientFactory)
+internal class BandRunnerFactory(ILogger<Worker> logger, IDistributedCache cache, IHttpClientFactory httpClientFactory, Publisher publisher)
 {
     private readonly Dictionary<Band, BandRunner> runners = [];
 
@@ -10,7 +10,7 @@ internal class BandRunnerFactory(ILogger<Worker> logger, IDistributedCache cache
     {
         if (!runners.TryGetValue(band, out var bandRunner))
         {
-            bandRunner = new BandRunner(band, logger, cache, httpClientFactory);
+            bandRunner = new BandRunner(band, logger, cache, httpClientFactory, publisher);
             runners[band] = bandRunner;
         }
 

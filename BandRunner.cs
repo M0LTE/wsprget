@@ -3,7 +3,7 @@ using System.Diagnostics;
 
 namespace wsprget;
 
-internal class BandRunner(Band band, ILogger<Worker> _logger, IDistributedCache _cache, IHttpClientFactory _httpClientFactory)
+internal class BandRunner(Band band, ILogger<Worker> _logger, IDistributedCache _cache, IHttpClientFactory _httpClientFactory, Publisher publisher)
 {
     private readonly Stopwatch timerSinceLastRequest = new();
     private const int minSecsBetweenRequests = 5;
@@ -50,6 +50,8 @@ internal class BandRunner(Band band, ILogger<Worker> _logger, IDistributedCache 
                     AbsoluteExpirationRelativeToNow = TimeSpan.FromDays(maxAgeDays),
                 };
                 await _cache.SetAsync(spot.Hash, new byte[1], options, stoppingToken);
+
+                await publisher.Publish(spot);
             }
 
             _logger.LogInformation("{band}: {count} new spots, limit was {limit}", GetBand(band), timeFilteredNewSpots.Length, limit);
@@ -64,7 +66,6 @@ internal class BandRunner(Band band, ILogger<Worker> _logger, IDistributedCache 
 
             if (rawNewSpots.Count == limit)
             {
-                Debugger.Break();
                 return true; // Indicate that we should skip the delay next time
             }
             else

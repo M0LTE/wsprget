@@ -12,6 +12,7 @@ builder.Services.AddHttpClient("WSPR", client =>
     client.Timeout = TimeSpan.FromSeconds(30);
     client.DefaultRequestHeaders.Add("User-Agent", "WSPRGet/1.0");
 });
+builder.Services.AddSingleton<Publisher>();
 builder.Services.AddSingleton<BandRunnerFactory>();
 builder.Services.AddLogging(logging =>
 {

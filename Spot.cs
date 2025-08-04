@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json.Serialization;
 
 namespace wsprget;
 
@@ -27,10 +28,12 @@ public record class Spot
     public int Drift { get; set; }
     public required string Grid { get; set; }
     public int PowerDbm { get; set; }
+    [JsonIgnore]
     public double PowerW { get; set; }
     public required string Reporter { get; set; }
     public required string ReporterGrid { get; set; }
     public int DistanceKm { get; set; }
+    [JsonIgnore]
     public int DistanceMi { get; set; }
     public required string Mode { get; set; }
     public string? Version { get; set; }
