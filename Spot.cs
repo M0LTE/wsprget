@@ -16,7 +16,7 @@ public record class Spot
     {
         get
         {
-            hash ??= SHA256.HashData(Encoding.UTF8.GetBytes(ToString(this))).Aggregate(new StringBuilder(), static (sb, b) => sb.Append(b.ToString("x2"))).ToString();
+            hash ??= MD5.HashData(Encoding.UTF8.GetBytes(ToString(this))).Aggregate(new StringBuilder(), static (sb, b) => sb.Append(b.ToString("x2"))).ToString();
             return hash;
         }
     }

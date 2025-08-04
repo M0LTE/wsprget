@@ -4,13 +4,13 @@ using MQTTnet.Protocol;
 using MQTTnet.Client;
 using System.Text;
 using System.Text.Json;
+using AmateurBandLib;
 
 namespace wsprget;
 
 internal class Publisher : IDisposable
 {
     const string host = "44.31.241.66";
-    const string topic = "wspr";
     
     private readonly IManagedMqttClient _mqttClient;
     private readonly ILogger<Publisher> _logger;
@@ -70,6 +70,12 @@ internal class Publisher : IDisposable
                 PropertyNamingPolicy = JsonNamingPolicy.CamelCase
             });
 
+            var topic = BuildTopic(spot);
+            if (topic == null)
+            {
+                return;
+            }
+
             var message = new MqttApplicationMessageBuilder()
                 .WithTopic(topic)
                 .WithPayload(Encoding.UTF8.GetBytes(json))
@@ -85,6 +91,49 @@ internal class Publisher : IDisposable
         {
             _logger.LogError(ex, "Failed to publish spot {Call} to MQTT", spot.Call);
         }
+    }
+
+    private static string? BuildTopic(Spot spot)
+    {
+        // wspr/band/mode/sendercall/receipvercall/sendergrid/receivergrid
+
+        var band = AmateurBand.FromHz(spot.FrequencyHz);
+        if (string.IsNullOrWhiteSpace(band?.Name))
+        {
+            return null; // Invalid band
+        }
+
+        if (string.IsNullOrWhiteSpace(spot.Mode))
+        {
+            return null; // Invalid mode
+        }
+
+        if (string.IsNullOrWhiteSpace(spot.Call) || string.IsNullOrWhiteSpace(spot.Reporter))
+        {
+            return null; // Invalid callsigns
+        }
+
+        if (string.IsNullOrWhiteSpace(spot.Grid) || string.IsNullOrWhiteSpace(spot.ReporterGrid))
+        {
+            return null; // Invalid grids
+        }
+
+        if (spot.Grid.Length < 4 || spot.ReporterGrid.Length < 4)
+        {
+            return null; // Grids must be at least 4 characters long
+        }
+
+        return $"wspr/{band.Name}/{spot.Mode.ToLowerInvariant()}/{spot.Call.ToUpperInvariant()}/{spot.Reporter.ToUpperInvariant()}/{AtMost(spot.Grid.ToUpperInvariant(), 4)}/{AtMost(spot.ReporterGrid.ToUpperInvariant(), 4)}";
+    }
+
+    private static string AtMost(string v1, int v2)
+    {
+        if (v1.Length > v2)
+        {
+            return v1[..v2]; // Truncate to the first v2 characters
+        }
+
+        return v1;
     }
 
     private Task OnConnectedAsync(MqttClientConnectedEventArgs arg)
