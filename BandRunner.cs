@@ -6,10 +6,11 @@ namespace wsprget;
 internal class BandRunner(Band band, ILogger<Worker> _logger, IDistributedCache _cache, IHttpClientFactory _httpClientFactory, Publisher publisher)
 {
     private readonly Stopwatch timerSinceLastRequest = new();
-    private const int minSecsBetweenRequests = 5;
     private const int maxAgeDays = 7;
     private int limit = 1000;
     private const int maxLimit = 2000;
+
+    public string BandName => GetBand(band);
 
     public async Task<bool> OneShot(bool skipDelay, CancellationToken stoppingToken)
     {
@@ -23,9 +24,9 @@ internal class BandRunner(Band band, ILogger<Worker> _logger, IDistributedCache 
             {
                 if (!skipDelay)
                 {
-                    if (timerSinceLastRequest.Elapsed < TimeSpan.FromSeconds(minSecsBetweenRequests))
+                    if (timerSinceLastRequest.Elapsed < TimeSpan.FromMilliseconds(Constants.MillisecondsBetweenRequests))
                     {
-                        var delay = TimeSpan.FromSeconds(minSecsBetweenRequests) - timerSinceLastRequest.Elapsed;
+                        var delay = TimeSpan.FromMilliseconds(Constants.MillisecondsBetweenRequests) - timerSinceLastRequest.Elapsed;
                         if (delay > TimeSpan.Zero)
                         {
                             _logger.LogInformation("{band}: Waiting {delay} before next request", GetBand(band), delay);

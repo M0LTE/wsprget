@@ -1,6 +1,6 @@
 namespace wsprget;
 
-internal class Worker(BandRunnerFactory bandRunnerFactory) : BackgroundService
+internal class Worker(BandRunnerFactory bandRunnerFactory, ILogger<Worker> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -23,9 +23,11 @@ internal class Worker(BandRunnerFactory bandRunnerFactory) : BackgroundService
         await Task.WhenAll(tasks);
     }
 
-    internal static async Task RunLoop(BandRunner runner, CancellationToken stoppingToken)
+    internal async Task RunLoop(BandRunner runner, CancellationToken stoppingToken)
     {
-        await Task.Delay(Random.Shared.Next(0, 5000), stoppingToken);
+        var wait = Random.Shared.Next(0, Constants.MillisecondsBetweenRequests);
+        await Task.Delay(wait, stoppingToken);
+        logger.LogInformation("Waited {wait}ms before starting {band} runner", wait, runner.BandName);
 
         bool skipDelay = false;
         while (!stoppingToken.IsCancellationRequested)
@@ -33,4 +35,9 @@ internal class Worker(BandRunnerFactory bandRunnerFactory) : BackgroundService
             skipDelay = await runner.OneShot(skipDelay, stoppingToken);
         }
     }
+}
+
+internal class Constants
+{
+    public const int MillisecondsBetweenRequests = 10000;
 }
