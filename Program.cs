@@ -4,7 +4,7 @@ var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddHostedService<Worker>();
 builder.Services.AddStackExchangeRedisCache(options =>
 {
-    options.Configuration = "localhost";
+    options.Configuration = "redis";
     options.InstanceName = "Instance";
 });
 builder.Services.AddHttpClient("WSPR", client =>

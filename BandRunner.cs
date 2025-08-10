@@ -7,7 +7,7 @@ internal class BandRunner(Band band, ILogger<Worker> _logger, IDistributedCache 
 {
     private readonly Stopwatch timerSinceLastRequest = new();
     private const int maxAgeDays = 7;
-    private int limit = 1000;
+    private int limit = 100;
     private const int maxLimit = 2000;
 
     public string BandName => GetBand(band);

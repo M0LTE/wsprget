@@ -5,6 +5,7 @@ using MQTTnet.Client;
 using System.Text;
 using System.Text.Json;
 using AmateurBandLib;
+using System.Diagnostics;
 
 namespace wsprget;
 
@@ -30,6 +31,8 @@ internal class Publisher : IDisposable
         var managedMqttClientOptions = new ManagedMqttClientOptionsBuilder()
             .WithClientOptions(mqttClientOptions)
             .WithAutoReconnectDelay(TimeSpan.FromSeconds(5))
+            .WithPendingMessagesOverflowStrategy(MQTTnet.Server.MqttPendingMessagesOverflowStrategy.DropOldestQueuedMessage)
+            .WithMaxPendingMessages(10000)
             .Build();
 
         _mqttClient = new MqttFactory().CreateManagedMqttClient();
@@ -54,6 +57,7 @@ internal class Publisher : IDisposable
         });
     }
 
+    readonly Stopwatch queueLengthDebugTimer = Stopwatch.StartNew();
     internal async Task Publish(Spot spot)
     {
         try
@@ -84,7 +88,13 @@ internal class Publisher : IDisposable
                 .Build();
 
             await _mqttClient.EnqueueAsync(message);
-            
+
+            if (queueLengthDebugTimer .Elapsed > TimeSpan.FromSeconds(10))
+            {
+                _logger.LogWarning("MQTT publish queue length: {QueueLength}", _mqttClient.PendingApplicationMessagesCount);
+                queueLengthDebugTimer.Restart();
+            }
+
             _logger.LogDebug("Published spot {Call} to MQTT topic {Topic}", spot.Call, topic);
         }
         catch (Exception ex)
