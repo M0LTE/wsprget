@@ -21,29 +21,32 @@ internal class Publisher : IDisposable
     public Publisher(ILogger<Publisher> logger, InstrumentationSource instrumentationSource)
     {
         _logger = logger;
-        this._instrumentationSource = instrumentationSource;
-        var mqttClientOptions = new MqttClientOptionsBuilder()
-            .WithTcpServer(host, 1883)
-            .WithClientId($"wsprget-{Environment.MachineName}-{Guid.NewGuid():N}"[..23]) // MQTT client ID limit
-            .WithCleanSession()
-            .WithCredentials("wsprget", Environment.GetEnvironmentVariable("WSPRGET_MQTT_PASSWORD") ?? throw new Exception("WSPRGET_MQTT_PASSWORD not set"))
-            .Build();
-
-        var managedMqttClientOptions = new ManagedMqttClientOptionsBuilder()
-            .WithClientOptions(mqttClientOptions)
-            .WithAutoReconnectDelay(TimeSpan.FromSeconds(5))
-            .WithPendingMessagesOverflowStrategy(MQTTnet.Server.MqttPendingMessagesOverflowStrategy.DropOldestQueuedMessage)
-            .WithMaxPendingMessages(10000)
-            .Build();
+        _instrumentationSource = instrumentationSource;
 
         for (int i = 0; i < _mqttClients.Length; i++)
         {
+            var mqttClientOptions = new MqttClientOptionsBuilder()
+                .WithTcpServer(host, 1883)
+                .WithClientId($"wsprget-{Environment.MachineName}-{i}")
+                .WithCleanSession()
+                .WithCredentials("wsprget", Environment.GetEnvironmentVariable("WSPRGET_MQTT_PASSWORD") ?? throw new Exception("WSPRGET_MQTT_PASSWORD not set"))
+                .Build();
+
+            var managedMqttClientOptions = new ManagedMqttClientOptionsBuilder()
+                .WithClientOptions(mqttClientOptions)
+                .WithAutoReconnectDelay(TimeSpan.FromSeconds(5))
+                .WithPendingMessagesOverflowStrategy(MQTTnet.Server.MqttPendingMessagesOverflowStrategy.DropOldestQueuedMessage)
+                .WithMaxPendingMessages(10000)
+                .Build();
+
             var _mqttClient = new MqttFactory().CreateManagedMqttClient();
 
             // Set up event handlers
             _mqttClient.ConnectedAsync += OnConnectedAsync;
             _mqttClient.DisconnectedAsync += OnDisconnectedAsync;
             _mqttClient.ConnectingFailedAsync += OnConnectingFailedAsync;
+
+            _mqttClients[i] = _mqttClient;
 
             // Start the managed client
             _ = Task.Run(async () =>
@@ -58,8 +61,6 @@ internal class Publisher : IDisposable
                     _logger.LogError(ex, "Failed to start MQTT client");
                 }
             });
-
-            _mqttClients[i] = _mqttClient;
         }
     }
 
