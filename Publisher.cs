@@ -15,12 +15,13 @@ internal class Publisher : IDisposable
     
     private readonly IManagedMqttClient _mqttClient;
     private readonly ILogger<Publisher> _logger;
+    private readonly InstrumentationSource _instrumentationSource;
     private bool _disposed = false;
 
-    public Publisher(ILogger<Publisher> logger)
+    public Publisher(ILogger<Publisher> logger, InstrumentationSource instrumentationSource)
     {
         _logger = logger;
-
+        this._instrumentationSource = instrumentationSource;
         var mqttClientOptions = new MqttClientOptionsBuilder()
             .WithTcpServer(host, 1883)
             .WithClientId($"wsprget-{Environment.MachineName}-{Guid.NewGuid():N}"[..23]) // MQTT client ID limit
@@ -88,8 +89,9 @@ internal class Publisher : IDisposable
                 .Build();
 
             await _mqttClient.EnqueueAsync(message);
+            _instrumentationSource.SpotsQueuedForPublishCounter.Add(1);
 
-            if (queueLengthDebugTimer .Elapsed > TimeSpan.FromSeconds(10))
+            if (queueLengthDebugTimer.Elapsed > TimeSpan.FromSeconds(10))
             {
                 _logger.LogWarning("MQTT publish queue length: {QueueLength}", _mqttClient.PendingApplicationMessagesCount);
                 queueLengthDebugTimer.Restart();
