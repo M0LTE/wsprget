@@ -32,8 +32,8 @@ internal class Publisher : IDisposable
         var managedMqttClientOptions = new ManagedMqttClientOptionsBuilder()
             .WithClientOptions(mqttClientOptions)
             .WithAutoReconnectDelay(TimeSpan.FromSeconds(5))
-            .WithPendingMessagesOverflowStrategy(MQTTnet.Server.MqttPendingMessagesOverflowStrategy.DropOldestQueuedMessage)
-            .WithMaxPendingMessages(10000)
+            //.WithPendingMessagesOverflowStrategy(MQTTnet.Server.MqttPendingMessagesOverflowStrategy.DropOldestQueuedMessage)
+            //.WithMaxPendingMessages(10000)
             .Build();
 
         _mqttClient = new MqttFactory().CreateManagedMqttClient();
@@ -90,6 +90,7 @@ internal class Publisher : IDisposable
 
             await _mqttClient.EnqueueAsync(message);
             _instrumentationSource.SpotsQueuedForPublishCounter.Add(1);
+            _instrumentationSource.MqttPublishBacklogLength.Record(_mqttClient.PendingApplicationMessagesCount);
 
             if (queueLengthDebugTimer.Elapsed > TimeSpan.FromSeconds(10))
             {
