@@ -66,4 +66,4 @@ var app = builder.Build();
 app.MapOpenApi();
 app.MapControllers();
 app.MapPrometheusScrapingEndpoint();
-app.Run();
+app.Run("http://0.0.0.0:5000");
