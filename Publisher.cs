@@ -1,19 +1,19 @@
-﻿using MQTTnet;
+﻿using AmateurBandLib;
+using MQTTnet;
+using MQTTnet.Client;
 using MQTTnet.Extensions.ManagedClient;
 using MQTTnet.Protocol;
-using MQTTnet.Client;
 using System.Text;
 using System.Text.Json;
-using AmateurBandLib;
-using System.Diagnostics;
 
 namespace wsprget;
 
 internal class Publisher : IDisposable
 {
     const string host = "44.31.241.66";
-    
-    private readonly IManagedMqttClient _mqttClient;
+    const int numberOfClients = 4; // Number of MQTT clients to create
+
+    private readonly IManagedMqttClient[] _mqttClients = new IManagedMqttClient[numberOfClients];
     private readonly ILogger<Publisher> _logger;
     private readonly InstrumentationSource _instrumentationSource;
     private bool _disposed = false;
@@ -32,33 +32,37 @@ internal class Publisher : IDisposable
         var managedMqttClientOptions = new ManagedMqttClientOptionsBuilder()
             .WithClientOptions(mqttClientOptions)
             .WithAutoReconnectDelay(TimeSpan.FromSeconds(5))
-            //.WithPendingMessagesOverflowStrategy(MQTTnet.Server.MqttPendingMessagesOverflowStrategy.DropOldestQueuedMessage)
-            //.WithMaxPendingMessages(10000)
+            .WithPendingMessagesOverflowStrategy(MQTTnet.Server.MqttPendingMessagesOverflowStrategy.DropOldestQueuedMessage)
+            .WithMaxPendingMessages(10000)
             .Build();
 
-        _mqttClient = new MqttFactory().CreateManagedMqttClient();
-        
-        // Set up event handlers
-        _mqttClient.ConnectedAsync += OnConnectedAsync;
-        _mqttClient.DisconnectedAsync += OnDisconnectedAsync;
-        _mqttClient.ConnectingFailedAsync += OnConnectingFailedAsync;
-
-        // Start the managed client
-        _ = Task.Run(async () =>
+        for (int i = 0; i < _mqttClients.Length; i++)
         {
-            try
+            var _mqttClient = new MqttFactory().CreateManagedMqttClient();
+
+            // Set up event handlers
+            _mqttClient.ConnectedAsync += OnConnectedAsync;
+            _mqttClient.DisconnectedAsync += OnDisconnectedAsync;
+            _mqttClient.ConnectingFailedAsync += OnConnectingFailedAsync;
+
+            // Start the managed client
+            _ = Task.Run(async () =>
             {
-                await _mqttClient.StartAsync(managedMqttClientOptions);
-                _logger.LogInformation("MQTT client started and connecting to {Host}", host);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to start MQTT client");
-            }
-        });
+                try
+                {
+                    await _mqttClient.StartAsync(managedMqttClientOptions);
+                    _logger.LogInformation("MQTT client started and connecting to {Host}", host);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to start MQTT client");
+                }
+            });
+
+            _mqttClients[i] = _mqttClient;
+        }
     }
 
-    readonly Stopwatch queueLengthDebugTimer = Stopwatch.StartNew();
     internal async Task Publish(Spot spot)
     {
         try
@@ -88,15 +92,10 @@ internal class Publisher : IDisposable
                 .WithRetainFlag(false)
                 .Build();
 
-            await _mqttClient.EnqueueAsync(message);
+            var (client, id) = GetRandomClient();
+            await client.EnqueueAsync(message);
             _instrumentationSource.SpotsQueuedForPublishCounter.Add(1);
-            _instrumentationSource.MqttPublishBacklogLength.Record(_mqttClient.PendingApplicationMessagesCount);
-
-            if (queueLengthDebugTimer.Elapsed > TimeSpan.FromSeconds(10))
-            {
-                _logger.LogWarning("MQTT publish queue length: {QueueLength}", _mqttClient.PendingApplicationMessagesCount);
-                queueLengthDebugTimer.Restart();
-            }
+            _instrumentationSource.MqttPublishBacklogLength.Record(client.PendingApplicationMessagesCount, new KeyValuePair<string, object?>("mqttclientid", id));
 
             _logger.LogDebug("Published spot {Call} to MQTT topic {Topic}", spot.Call, topic);
         }
@@ -104,6 +103,13 @@ internal class Publisher : IDisposable
         {
             _logger.LogError(ex, "Failed to publish spot {Call} to MQTT", spot.Call);
         }
+    }
+
+    private (IManagedMqttClient, int) GetRandomClient()
+    {
+        // Return a random MQTT client from the pool
+        var randomIndex = Random.Shared.Next(_mqttClients.Length);
+        return (_mqttClients[randomIndex], randomIndex);
     }
 
     private static string? BuildTopic(Spot spot)
@@ -175,13 +181,16 @@ internal class Publisher : IDisposable
             
             try
             {
-                _mqttClient?.StopAsync().GetAwaiter().GetResult();
-                _mqttClient?.Dispose();
-                _logger.LogInformation("MQTT client disposed");
+                foreach (var client in _mqttClients)
+                {
+                    client?.StopAsync().GetAwaiter().GetResult();
+                    client?.Dispose();
+                }
+                _logger.LogInformation("MQTT clients disposed");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error disposing MQTT client");
+                _logger.LogError(ex, "Error disposing MQTT clients");
             }
         }
     }
