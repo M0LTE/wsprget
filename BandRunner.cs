@@ -6,7 +6,7 @@ namespace wsprget;
 internal class BandRunner(Band band, ILogger<Worker> _logger, IDistributedCache _cache, IHttpClientFactory _httpClientFactory, Publisher publisher)
 {
     private readonly Stopwatch timerSinceLastRequest = new();
-    private const int maxAgeDays = 7;
+    private const int maxAgeDays = 1;
     private int limit = 100;
     private const int maxLimit = 2000;
 
