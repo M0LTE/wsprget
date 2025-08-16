@@ -12,7 +12,7 @@ internal class BandRunner(Band band, ILogger<Worker> _logger, IDistributedCache 
 
     public string BandName => GetBand(band);
 
-    public async Task<bool> OneShot(bool skipDelay, CancellationToken stoppingToken)
+    public async Task OneShot(CancellationToken stoppingToken)
     {
         try
         {
@@ -22,21 +22,14 @@ internal class BandRunner(Band band, ILogger<Worker> _logger, IDistributedCache 
             }
             else
             {
-                if (!skipDelay)
+                if (timerSinceLastRequest.Elapsed < TimeSpan.FromMilliseconds(Constants.MillisecondsBetweenRequests))
                 {
-                    if (timerSinceLastRequest.Elapsed < TimeSpan.FromMilliseconds(Constants.MillisecondsBetweenRequests))
+                    var delay = TimeSpan.FromMilliseconds(Constants.MillisecondsBetweenRequests) - timerSinceLastRequest.Elapsed;
+                    if (delay > TimeSpan.Zero)
                     {
-                        var delay = TimeSpan.FromMilliseconds(Constants.MillisecondsBetweenRequests) - timerSinceLastRequest.Elapsed;
-                        if (delay > TimeSpan.Zero)
-                        {
-                            _logger.LogInformation("{band}: Waiting {delay} before next request", GetBand(band), delay);
-                            await Task.Delay(delay, stoppingToken);
-                        }
+                        _logger.LogInformation("{band}: Waiting {delay} before next request", GetBand(band), delay);
+                        await Task.Delay(delay, stoppingToken);
                     }
-                }
-                else
-                {
-                    _logger.LogInformation("{band}: Skipping delay as requested", GetBand(band));
                 }
             }
 
@@ -59,26 +52,16 @@ internal class BandRunner(Band band, ILogger<Worker> _logger, IDistributedCache 
 
             limit = CalculateNewLimit(timeFilteredNewSpots.Length);
 
-            if (!skipDelay && timeFilteredNewSpots.Length < 5)
+            if (timeFilteredNewSpots.Length < 5)
             {
                 _logger.LogInformation("{band}: Small number of spots, sleeping for 30 seconds", GetBand(band));
                 await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
-            }
-
-            if (rawNewSpots.Count == limit)
-            {
-                return true; // Indicate that we should skip the delay next time
-            }
-            else
-            {
-                return false;
             }
         }
         catch (Exception ex)
         {
             _logger.LogError("{band}: Error fetching spots: {exception}", GetBand(band), ex.Message);
             await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
-            return false;
         }
     }
 

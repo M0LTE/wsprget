@@ -5,7 +5,7 @@ internal class Worker(BandRunnerFactory bandRunnerFactory, ILogger<Worker> logge
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var tasks = new List<Task>();
-        //var bands = new List<Band> { Band.M40 };
+        //var bands = new List<Band> { Band.M8 };
         var bands = Enum.GetValues<Band>();
 
         foreach (var band in bands)
@@ -29,10 +29,9 @@ internal class Worker(BandRunnerFactory bandRunnerFactory, ILogger<Worker> logge
         await Task.Delay(wait, stoppingToken);
         logger.LogInformation("Waited {wait}ms before starting {band} runner", wait, runner.BandName);
 
-        bool skipDelay = false;
         while (!stoppingToken.IsCancellationRequested)
         {
-            skipDelay = await runner.OneShot(skipDelay, stoppingToken);
+            await runner.OneShot(stoppingToken);
         }
     }
 }
