@@ -3,6 +3,7 @@ using MQTTnet;
 using MQTTnet.Client;
 using MQTTnet.Extensions.ManagedClient;
 using MQTTnet.Protocol;
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 
@@ -64,6 +65,11 @@ internal class Publisher : IDisposable
         }
     }
 
+    private static readonly JsonSerializerOptions options = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
+
     internal async Task Publish(Spot spot)
     {
         try
@@ -75,12 +81,10 @@ internal class Publisher : IDisposable
             }
 
             // Serialize the spot to JSON
-            var json = JsonSerializer.Serialize(spot, new JsonSerializerOptions
-            {
-                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-            });
+            var json = JsonSerializer.Serialize(spot, options);
 
-            var topic = BuildTopic(spot);
+            var band = AmateurBand.FromHz(spot.FrequencyHz);
+            var topic = GetTopic(spot, band);
             if (topic == null)
             {
                 return;
@@ -95,7 +99,16 @@ internal class Publisher : IDisposable
 
             var (client, id) = GetRandomClient();
             await client.EnqueueAsync(message);
-            _instrumentationSource.SpotsQueuedForPublishCounter.Add(1);
+            
+            var tags = new TagList
+            {
+                { "band", band.Name },
+                { "senderGrid", spot.Grid.ToUpperInvariant() },
+                { "receiverGrid", spot.ReporterGrid.ToUpperInvariant() },
+                { "mode", spot.Mode.ToLowerInvariant() },
+            };
+
+            _instrumentationSource.SpotsQueuedForPublishCounter.Add(1, tags);
             _instrumentationSource.MqttPublishBacklogLength.Record(client.PendingApplicationMessagesCount, new KeyValuePair<string, object?>("mqttclientid", id));
 
             _logger.LogDebug("Published spot {Call} to MQTT topic {Topic}", spot.Call, topic);
@@ -113,11 +126,10 @@ internal class Publisher : IDisposable
         return (_mqttClients[randomIndex], randomIndex);
     }
 
-    private static string? BuildTopic(Spot spot)
+    private static string? GetTopic(Spot spot, AmateurBand band)
     {
         // wspr/band/mode/sendercall/receipvercall/sendergrid/receivergrid
-
-        var band = AmateurBand.FromHz(spot.FrequencyHz);
+        
         if (string.IsNullOrWhiteSpace(band?.Name))
         {
             return null; // Invalid band
