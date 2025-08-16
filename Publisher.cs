@@ -103,9 +103,9 @@ internal class Publisher : IDisposable
             var tags = new TagList
             {
                 { "band", band.Name },
-                { "senderGrid", spot.Grid.ToUpperInvariant() },
-                { "receiverGrid", spot.ReporterGrid.ToUpperInvariant() },
-                { "mode", spot.Mode.ToLowerInvariant() },
+                //{ "senderGrid", spot.Grid.ToUpperInvariant() },
+                //{ "receiverGrid", spot.ReporterGrid.ToUpperInvariant() },
+                //{ "mode", spot.Mode.ToLowerInvariant() },
             };
 
             _instrumentationSource.SpotsQueuedForPublishCounter.Add(1, tags);
