@@ -1,9 +1,8 @@
-using Microsoft.Extensions.Caching.Distributed;
 using System.Diagnostics;
 
 namespace wsprget;
 
-internal class BandRunner(Band band, ILogger<Worker> _logger, IDistributedCache _cache, IHttpClientFactory _httpClientFactory, Publisher publisher)
+internal class BandRunner(Band band, ILogger<Worker> _logger, SpotDeduplicator _deduplicator, IHttpClientFactory _httpClientFactory, Publisher publisher)
 {
     private readonly Stopwatch timerSinceLastRequest = new();
     private const int maxAgeDays = 1;
@@ -37,16 +36,10 @@ internal class BandRunner(Band band, ILogger<Worker> _logger, IDistributedCache 
             timerSinceLastRequest.Restart();
             var timeFilteredNewSpots = TimeFilter(rawNewSpots).ToArray();
 
-            foreach (var spot in timeFilteredNewSpots)
-            {
-                var options = new DistributedCacheEntryOptions
-                {
-                    AbsoluteExpirationRelativeToNow = TimeSpan.FromDays(maxAgeDays),
-                };
-                await _cache.SetAsync(spot.Hash, new byte[1], options, stoppingToken);
+            await _deduplicator.MarkSeenBatchAsync(timeFilteredNewSpots, stoppingToken);
 
-                await publisher.Publish(spot);
-            }
+            await Parallel.ForEachAsync(timeFilteredNewSpots, stoppingToken, async (spot, ct) =>
+                await publisher.Publish(spot));
 
             _logger.LogInformation("{band}: {count} new spots, limit was {limit}", GetBand(band), timeFilteredNewSpots.Length, limit);
 
@@ -162,5 +155,5 @@ internal class BandRunner(Band band, ILogger<Worker> _logger, IDistributedCache 
         }
     }
 
-    private async Task<bool> IsInCache(Spot spot) => await _cache.GetAsync(spot.Hash.ToString()) is not null;
+    private async Task<bool> IsInCache(Spot spot) => await _deduplicator.ExistsAsync(spot);
 }
